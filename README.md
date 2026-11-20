@@ -1,9 +1,9 @@
-# pcapan: TCP/UDP traffic analyser for pcap files
+# pcapan: analizator ruchu TCP/UDP z plików pcap
 
-`pcapan` is a command-line tool for Linux, written in C11. It reads a `.pcap` capture, rebuilds every TCP and UDP conversation, flags suspicious or unhealthy traffic, and writes:
+`pcapan` to narzędzie wiersza poleceń dla systemu Linux, napisane w C11. Wczytuje przechwycony ruch z pliku `.pcap`, odtwarza każdą rozmowę TCP i UDP, oznacza podejrzany lub nieprawidłowy ruch i tworzy:
 
-- `report.pdf`: a multi-page report with a capture summary, findings ranked by severity, every chart, and the largest flows
-- one PNG per chart: traffic over time, TCP connection attempts, protocol mix, top talkers, top services, packet sizes and connection durations
+- `report.pdf`: wielostronicowy raport z podsumowaniem przechwytu, ustaleniami uszeregowanymi według ważności, wszystkimi wykresami i największymi przepływami
+- osobny plik PNG dla każdego wykresu: ruch w czasie, próby połączeń TCP, podział protokołów, najaktywniejsze hosty, najważniejsze usługi, rozmiary pakietów i czasy trwania połączeń
 
 ```
 $ ./pcapan -o out samples/attack.pcap
@@ -19,13 +19,13 @@ samples/attack.pcap: 13,616 packets, 8.0 MB, 3504 flows, 3099 hosts
 Report written to out/report.pdf
 ```
 
-An example report from `samples/attack.pcap` is in [`docs/example_report.pdf`](docs/example_report.pdf).
+Przykładowy raport dla `samples/attack.pcap` znajduje się w [`docs/example_report.pdf`](docs/example_report.pdf).
 
-![TCP connection attempts](docs/tcp_handshakes.png)
+![Próby połączeń TCP](docs/tcp_handshakes.png)
 
-## Building
+## Kompilacja
 
-The only dependency is **Cairo**, a lightweight 2D graphics library that every Linux distribution ships. It produces both the PNG charts and the PDF report. Its font configuration library, fontconfig, is installed along with it.
+Jedyną zależnością jest **Cairo**, lekka biblioteka grafiki 2D dostępna w każdej dystrybucji Linuksa. Generuje zarówno wykresy PNG, jak i raport PDF. Razem z nią instaluje się fontconfig, jej biblioteka do konfiguracji czcionek.
 
 ```sh
 # Debian / Ubuntu
@@ -33,90 +33,90 @@ sudo apt install build-essential pkg-config libcairo2-dev
 # Fedora
 sudo dnf install gcc make pkgconf-pkg-config cairo-devel
 
-make            # builds ./pcapan
+make            # buduje ./pcapan
 ```
 
-The code compiles without warnings under `-std=c11 -Wall -Wextra -Wpedantic -Wshadow`.
+Kod kompiluje się bez ostrzeżeń z flagami `-std=c11 -Wall -Wextra -Wpedantic -Wshadow`.
 
-## Usage
+## Użycie
 
 ```
-pcapan [-o DIR] [-q] FILE.pcap
+pcapan [-o KATALOG] [-q] PLIK.pcap
 
-  -o DIR   output directory (default: pcapan_out, created if missing)
-  -q       quiet: do not print the summary to the terminal
-  -h       help
-  -V       version
+  -o KATALOG  katalog wyjściowy (domyślnie: pcapan_out, tworzony, jeśli nie istnieje)
+  -q          tryb cichy: nie wypisuje podsumowania w terminalu
+  -h          pomoc
+  -V          wersja
 ```
 
-Capture your own traffic with `sudo tcpdump -i any -w capture.pcap`. Files in pcapng format, Wireshark's default, are detected and rejected with a message. Convert them first with `editcap -F pcap in.pcapng out.pcap`.
+Własny ruch możesz przechwycić poleceniem `sudo tcpdump -i any -w capture.pcap`. Pliki w formacie pcapng, domyślnym dla Wiresharka, są wykrywane i odrzucane z odpowiednim komunikatem. Najpierw przekonwertuj je poleceniem `editcap -F pcap in.pcapng out.pcap`.
 
-## Testing
+## Testowanie
 
 ```sh
-make samples   # generates 4 synthetic captures in samples/ (Python 3, stdlib only)
-make test      # runs pcapan on each of them
-make asan      # rebuilds with AddressSanitizer + UndefinedBehaviorSanitizer
+make samples   # generuje 4 syntetyczne przechwyty w samples/ (Python 3, tylko biblioteka standardowa)
+make test      # uruchamia pcapan na każdym z nich
+make asan      # przebudowuje z AddressSanitizer + UndefinedBehaviorSanitizer
 ```
 
-| Sample | What it exercises |
+| Próbka | Co sprawdza |
 |---|---|
-| `normal.pcap` | two minutes of web, DNS, SSH and NTP traffic, IPv4 and IPv6 |
-| `attack.pcap` | the same traffic plus a port scan, a SYN flood, a UDP fan-out, DNS amplification, a zero-window receiver, a lossy connection and a Telnet login |
-| `malformed.pcap` | broken IP/TCP headers, a frame shorter than Ethernet, a file cut mid-packet |
-| `bigendian_ns.pcap` | big-endian byte order, nanosecond timestamps, Linux cooked-capture link type |
+| `normal.pcap` | dwie minuty ruchu WWW, DNS, SSH i NTP, IPv4 i IPv6 |
+| `attack.pcap` | ten sam ruch oraz skanowanie portów, SYN flood, UDP fan-out, amplifikację DNS, odbiorcę z zerowym oknem, połączenie ze stratami pakietów i logowanie przez Telnet |
+| `malformed.pcap` | uszkodzone nagłówki IP/TCP, ramkę krótszą niż nagłówek Ethernet, plik ucięty w połowie pakietu |
+| `bigendian_ns.pcap` | kolejność bajtów big-endian, znaczniki czasu w nanosekundach, typ łącza Linux cooked capture |
 
-The tool was checked with valgrind (no leaks or errors) and with ASan/UBSan on all samples. It was also run on empty, header-only, random and byte-fuzzed files. Bad input never crashes it: it exits with an error or analyses everything that could be read.
+Narzędzie sprawdzono programem valgrind (brak wycieków i błędów) oraz z ASan/UBSan na wszystkich próbkach. Uruchomiono je też na plikach pustych, zawierających sam nagłówek, losowych i zmodyfikowanych fuzzingiem. Błędne dane wejściowe nigdy nie powodują awarii: program kończy się błędem albo analizuje wszystko, co udało się odczytać.
 
-## Architecture
+## Architektura
 
 ```
 pcap.c  ->  decode.c  ->  analysis.c  ->  anomaly.c  ->  charts.c  ->  report.c
- read        parse         flows and       detection     PNG charts   PDF report
- records     headers       statistics      rules         (Cairo)      (Cairo)
+ odczyt      parsowanie    przepływy i     reguły        wykresy      raport
+ rekordów    nagłówków     statystyki      detekcji      PNG (Cairo)  PDF (Cairo)
 ```
 
-| File | Responsibility |
+| Plik | Odpowiedzialność |
 |---|---|
-| `pcap.c` | Reads the classic pcap format directly. It handles both byte orders and both µs and ns timestamps, and detects truncated files. |
-| `decode.c` | Parses Ethernet (with VLAN tags), Linux SLL/SLL2, raw IP and BSD loopback, then IPv4 and IPv6 (including extension headers and fragments), then TCP and UDP. Every read is bounds-checked. |
-| `analysis.c` | A flow table keyed by the 5-tuple, where both directions map to one flow. It also tracks a per-second timeline, a packet size histogram, TCP handshake state and retransmissions. After the last packet it aggregates hosts and services. |
-| `anomaly.c` | Detection rules. Each one is a documented threshold at the top of the file. |
-| `charts.c` | Seven charts. Each is a single function drawing on a `cairo_t`. |
-| `report.c` | The PDF layout: text wrapping, pagination, severity tags, the flows table. |
-| `main.c` | Command-line handling and the main pipeline. |
+| `pcap.c` | Bezpośredni odczyt klasycznego formatu pcap. Obsługuje obie kolejności bajtów, znaczniki czasu w µs i ns oraz wykrywa ucięte pliki. |
+| `decode.c` | Parsuje Ethernet (ze znacznikami VLAN), Linux SLL/SLL2, surowe IP i BSD loopback, następnie IPv4 i IPv6 (wraz z nagłówkami rozszerzeń i fragmentami), a na końcu TCP i UDP. Każdy odczyt jest sprawdzany pod kątem granic bufora. |
+| `analysis.c` | Tablica przepływów indeksowana 5-krotką, w której oba kierunki trafiają do jednego przepływu. Śledzi też oś czasu z rozdzielczością sekundową, histogram rozmiarów pakietów, stan uzgadniania połączeń TCP i retransmisje. Po ostatnim pakiecie agreguje statystyki hostów i usług. |
+| `anomaly.c` | Reguły detekcji. Każda to udokumentowany próg zdefiniowany na początku pliku. |
+| `charts.c` | Siedem wykresów. Każdy to jedna funkcja rysująca na `cairo_t`. |
+| `report.c` | Układ PDF: zawijanie tekstu, podział na strony, etykiety ważności, tabela przepływów. |
+| `main.c` | Obsługa wiersza poleceń i główny potok przetwarzania. |
 
-### Design decisions
+### Decyzje projektowe
 
-- **No libpcap.** The file format is 24 bytes of file header plus 16 bytes per packet. Reading it directly removes a dependency and keeps the tool in full control of malformed input.
-- **Streaming.** Packets are processed one at a time and never stored. Memory grows with the number of flows and the capture duration (one small record per second), not with file size.
-- **One drawing path for PNG and PDF.** Every chart draws on a fixed 800×420 logical canvas. For PNG output the canvas is scaled 2× onto an image surface. For the report it is scaled down onto a PDF page and stays vector graphics, so the charts are sharp at any zoom.
-- **Bidirectional flows.** The hash is computed on the two endpoints in sorted order, so A→B and B→A share a bucket. Side "a" of a flow is whoever sent the first packet, normally the client.
-- **Aggregation by sorting.** Top hosts and top services are built by emitting one record per flow endpoint, sorting, and merging neighbours. This is simpler than additional hash tables, and fast enough because it runs once.
-- **Explainable rules.** Every finding states the numbers that triggered it, so a reader can judge it rather than trust a score.
+- **Bez libpcap.** Format pliku to 24 bajty nagłówka pliku i 16 bajtów na każdy pakiet. Odczytywanie go bezpośrednio usuwa zależność i daje narzędziu pełną kontrolę nad uszkodzonymi danymi.
+- **Przetwarzanie strumieniowe.** Pakiety są przetwarzane pojedynczo i nigdy nie są przechowywane. Zużycie pamięci rośnie z liczbą przepływów i czasem trwania przechwytu (jeden mały rekord na sekundę), a nie z rozmiarem pliku.
+- **Jedna ścieżka rysowania dla PNG i PDF.** Każdy wykres jest rysowany na stałym, logicznym płótnie 800×420. Przy eksporcie do PNG płótno jest skalowane 2× na powierzchnię obrazu. W raporcie jest pomniejszane na stronę PDF i pozostaje grafiką wektorową, więc wykresy są ostre przy każdym powiększeniu.
+- **Przepływy dwukierunkowe.** Skrót (hash) jest liczony z obu punktów końcowych w posortowanej kolejności, więc A→B i B→A trafiają do tego samego kubełka. Strona „a” przepływu to ta, która wysłała pierwszy pakiet, zwykle klient.
+- **Agregacja przez sortowanie.** Ranking hostów i usług powstaje przez utworzenie jednego rekordu na każdy punkt końcowy przepływu, posortowanie ich i scalenie sąsiadów. To prostsze niż dodatkowe tablice mieszające i wystarczająco szybkie, bo wykonuje się tylko raz.
+- **Wyjaśnialne reguły.** Każde ustalenie podaje liczby, które je wywołały, więc czytelnik może je ocenić sam, zamiast ufać jakiejś punktacji.
 
-### Detection rules
+### Reguły detekcji
 
-| Finding | Rule | Severity |
+| Ustalenie | Reguła | Ważność |
 |---|---|---|
-| TCP port scan | one source sends SYNs to at least 15 distinct ports on one host, and none of those connections completes | high |
-| Host sweep | one source tries the same port on at least 15 hosts without completing a connection | high |
-| SYN flood | at least 100 incomplete handshakes to one service. The number of distinct sources is reported, and many sources suggest spoofing. | high |
-| UDP amplification | a DNS, NTP, SNMP, SSDP, LDAP, chargen or memcached flow where the server sends at least 10× the bytes requested and at least 100 KB | high |
-| High retransmission rate | 3% or more of TCP data segments are retransmitted | medium |
-| Lossy connections | flows with at least 10 retransmissions that make up at least 10% of their packets | medium |
-| UDP fan-out | one source sends UDP to at least 50 hosts | medium |
-| Zero window | a receiver advertises a zero window 3 or more times | low |
-| Many resets | at least 10 established connections, and over 20% of all of them, end with RST instead of FIN | low |
-| Traffic spike | a second carrying more than 10× the median rate and more than mean + 4σ (needs at least 30 s of capture) | low |
-| Unencrypted login | completed FTP, Telnet, POP3 or IMAP sessions | info |
-| Capture problems | malformed packets or a truncated file | info |
+| Skanowanie portów TCP | jedno źródło wysyła SYN do co najmniej 15 różnych portów jednego hosta i żadne z tych połączeń nie zostaje nawiązane | wysoka |
+| Przeszukiwanie hostów (host sweep) | jedno źródło próbuje tego samego portu na co najmniej 15 hostach, nie nawiązując połączenia | wysoka |
+| SYN flood | co najmniej 100 nieukończonych uzgodnień połączenia z jedną usługą. Raport podaje liczbę różnych źródeł; wiele źródeł sugeruje fałszowanie adresów | wysoka |
+| Amplifikacja UDP | przepływ DNS, NTP, SNMP, SSDP, LDAP, chargen lub memcached, w którym serwer wysyła co najmniej 10× więcej bajtów, niż zażądano, i co najmniej 100 KB | wysoka |
+| Wysoki odsetek retransmisji | co najmniej 3% segmentów danych TCP to retransmisje | średnia |
+| Połączenia ze stratami | przepływy z co najmniej 10 retransmisjami, stanowiącymi co najmniej 10% ich pakietów | średnia |
+| UDP fan-out | jedno źródło wysyła ruch UDP do co najmniej 50 hostów | średnia |
+| Zerowe okno | odbiorca co najmniej 3 razy ogłasza zerowe okno odbioru | niska |
+| Wiele resetów | co najmniej 10 nawiązanych połączeń, stanowiących ponad 20% wszystkich, kończy się pakietem RST zamiast FIN | niska |
+| Skok ruchu | sekunda z ruchem ponad 10× większym od mediany i większym niż średnia + 4σ (wymaga co najmniej 30 s przechwytu) | niska |
+| Nieszyfrowane logowanie | ukończone sesje FTP, Telnet, POP3 lub IMAP | informacyjna |
+| Problemy z przechwytem | uszkodzone pakiety lub ucięty plik | informacyjna |
 
-A segment counts as a retransmission when its sequence range ends at or before the highest sequence number already seen in that direction. Serial-number arithmetic handles sequence-number wrap-around.
+Segment jest uznawany za retransmisję, gdy jego zakres numerów sekwencyjnych kończy się na najwyższym numerze sekwencyjnym już widzianym w danym kierunku lub przed nim. Arytmetyka numerów seryjnych poprawnie obsługuje przepełnienie (zawinięcie) numerów sekwencyjnych.
 
-## Limitations
+## Ograniczenia
 
-- Classic pcap only. pcapng is detected and must be converted first.
-- No TCP stream reassembly or application-layer parsing. Analysis is based on headers.
-- IP fragments after the first one are counted but not reassembled.
-- Thresholds are fixed constants in `src/anomaly.c`. On very large or very small networks they may need tuning.
+- Obsługiwany jest tylko klasyczny format pcap. Pliki pcapng są wykrywane i trzeba je najpierw przekonwertować.
+- Brak składania strumieni TCP i analizy warstwy aplikacji. Analiza opiera się na nagłówkach.
+- Fragmenty IP po pierwszym są liczone, ale nie są składane.
+- Progi to stałe zdefiniowane w `src/anomaly.c`. W bardzo dużych lub bardzo małych sieciach mogą wymagać dostrojenia.
